@@ -16,6 +16,7 @@
 
 import { injectable, inject } from "inversify";
 import { DebugSessionManager } from '@theia/debug/lib/browser/debug-session-manager';
+import { DebugVariable } from "@theia/debug/lib/browser/console/debug-console-items";
 import * as Long from 'long';
 import { hexStrToUnsignedLong } from "../common/util";
 
@@ -31,6 +32,13 @@ export interface MemoryProvider {
      * any expression evaluating to an address.
      */
     readMemory(location: string, length: number): Promise<MemoryReadResult>;
+    getLocals(): Promise<VariableRange[]>;
+}
+
+export interface VariableRange {
+    name: string;
+    address: Long;
+    pastTheEndAddress: Long;
 }
 
 /**
@@ -75,5 +83,61 @@ export class MemoryProviderImpl implements MemoryProvider {
             bytes: bytes,
             address: address,
         };
+    }
+
+    async getLocals(): Promise<VariableRange[]> {
+        const session = this.debugSessionManager.currentSession;
+        if (session === undefined) {
+            throw new Error('No active debug session.');
+        }
+
+        const frame = session.currentFrame;
+        if (frame === undefined) {
+            throw new Error('No active stack frame.');
+        }
+
+        const ranges: VariableRange[] = [];
+
+        const scopes = await frame.getScopes();
+        for (const scope of scopes) {
+            const variables = await scope.getElements();
+            for (const v of variables) {
+                if (v instanceof DebugVariable) {
+                    const addrExp = `&${v.name}`;
+                    const sizeExp = `sizeof(${v.name})`;
+                    const addrResp = await session.sendRequest('evaluate', {
+                        expression: addrExp,
+                        context: 'watch',
+                        frameId: frame.raw.id,
+                    });
+                    const sizeResp = await session.sendRequest('evaluate', {
+                        expression: sizeExp,
+                        context: 'watch',
+                        frameId: frame.raw.id,
+                    });
+
+                    // Make sure the address is in the format we expect.
+                    if (!/^0x[0-9a-fA-F]+$/.test(addrResp.body.result)) {
+                        continue;
+                    }
+
+                    if (!/^[0-9]+$/.test(sizeResp.body.result)) {
+                        continue;
+                    }
+
+                    const size = parseInt(sizeResp.body.result);
+                    const address = hexStrToUnsignedLong(addrResp.body.result);
+                    const pastTheEndAddress = address.add(size);
+
+                    ranges.push({
+                        name: v.name,
+                        address: address,
+                        pastTheEndAddress: pastTheEndAddress,
+                    });
+                }
+            }
+        }
+
+        return ranges;
     }
 }

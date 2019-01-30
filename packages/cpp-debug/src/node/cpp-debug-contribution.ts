@@ -21,7 +21,7 @@ import { join } from 'path';
 import * as Ajv from 'ajv';
 
 const adapterName = 'gdb';
-const adapterPath = join(__dirname, '../../download/cdt-gdb-vscode/package');
+const adapterPath = '/home/emaisin/src/cdt-gdb-vscode';
 
 // Load schema from package.json
 const packageJson = require(join(adapterPath, 'package.json'));
