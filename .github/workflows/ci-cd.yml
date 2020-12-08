@@ -34,6 +34,13 @@ jobs:
           node-version: ${{ matrix.node }}
 
       - name: Build
+        # uses: nick-invision/retry@v2
+        # with:
+        #   timeout_minutes: 10
+        #   retry_wait_seconds: 30
+        #   max_attempts: 3
+        #   retry_on: error
+        #   command: yarn
         shell: bash
         run: |
           yarn install --no-lockfile
@@ -70,6 +77,7 @@ jobs:
         uses: actions/setup-node@v1
         with:
           node-version: ${{ matrix.node }}
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Pre-Publish 
         shell: bash
